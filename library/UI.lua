@@ -1,4 +1,4 @@
--- MatchaUI Library
+-- MatchaUI Library (Fixed)
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -24,7 +24,7 @@ local function isMouseOver(position, size, mousePos)
 end
 
 -- Window Class
-function MatchaUI.Window(title, size, position)
+function MatchaUI:CreateWindow(title, size, position)
     local self = setmetatable({}, MatchaUI)
     
     self.Title = title or "MatchaUI Window"
@@ -95,7 +95,7 @@ function MatchaUI:createWindowElements()
     }
 end
 
-function MatchaUI:Tab(name)
+function MatchaUI:AddTab(name)
     local tab = {
         Name = name,
         Elements = {},
@@ -104,6 +104,54 @@ function MatchaUI:Tab(name)
         Visible = false,
         Window = self
     }
+    
+    -- Set metatable for tab to add methods
+    setmetatable(tab, {
+        __index = function(t, key)
+            if key == "Section" then
+                return function(_, sectionName)
+                    local section = {
+                        Type = "Section",
+                        Text = sectionName,
+                        Position = createVector2(0, 0),
+                        Size = createVector2(0, 35)
+                    }
+                    table.insert(t.Elements, section)
+                    return section
+                end
+            elseif key == "Button" then
+                return function(_, buttonText, callback)
+                    local button = {
+                        Type = "Button",
+                        Text = buttonText,
+                        Callback = callback,
+                        Position = createVector2(0, 0),
+                        Size = createVector2(0, 35),
+                        Hovered = false
+                    }
+                    table.insert(t.Elements, button)
+                    table.insert(t.Buttons, button)
+                    return button
+                end
+            elseif key == "Toggle" then
+                return function(_, toggleText, default, callback)
+                    local toggle = {
+                        Type = "Toggle",
+                        Text = toggleText,
+                        Value = default or false,
+                        Callback = callback,
+                        Position = createVector2(0, 0),
+                        Size = createVector2(0, 30),
+                        Hovered = false
+                    }
+                    table.insert(t.Elements, toggle)
+                    table.insert(t.Toggles, toggle)
+                    return toggle
+                end
+            end
+            return rawget(t, key)
+        end
+    })
     
     local buttonX = self.Position.X + 20 + (#self.Tabs * 90)
     local buttonPos = createVector2(buttonX, self.Position.Y + 40)
@@ -138,17 +186,21 @@ function MatchaUI:Tab(name)
     return tab
 end
 
-function MatchaUI:switchTab(tabIndex)
+function MatchaUI:SwitchTab(tabIndex)
     for i, tab in ipairs(self.Tabs) do
         tab.Visible = (i == tabIndex)
-        tab.Button.Text.Color = (i == tabIndex) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
-        tab.Button.Underline.Size = (i == tabIndex) and createVector2(50, 2) or createVector2(0, 2)
+        if tab.Button and tab.Button.Text then
+            tab.Button.Text.Color = (i == tabIndex) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
+            if tab.Button.Underline then
+                tab.Button.Underline.Size = (i == tabIndex) and createVector2(50, 2) or createVector2(0, 2)
+            end
+        end
     end
     self.CurrentTab = tabIndex
-    self:render()
+    self:Render()
 end
 
-function MatchaUI:render()
+function MatchaUI:Render()
     for _, tab in ipairs(self.Tabs) do
         local currentY = self.Position.Y + 85  -- Start below tabs
         
@@ -243,7 +295,7 @@ function MatchaUI:render()
     end
 end
 
-function MatchaUI:handleInput(mousePos, mouse1Pressed)
+function MatchaUI:HandleInput(mousePos, mouse1Pressed)
     if mouse1Pressed then
         if not self.Dragging then
             -- Check for close button
@@ -260,8 +312,8 @@ function MatchaUI:handleInput(mousePos, mouse1Pressed)
             
             -- Check tab buttons
             for i, tab in ipairs(self.Tabs) do
-                if isMouseOver(tab.Button.Position, tab.Button.Size, mousePos) then
-                    self:switchTab(i)
+                if tab.Button and isMouseOver(tab.Button.Position, tab.Button.Size, mousePos) then
+                    self:SwitchTab(i)
                     break
                 end
             end
@@ -276,7 +328,7 @@ function MatchaUI:handleInput(mousePos, mouse1Pressed)
                         elseif element.Type == "Toggle" and element.Callback then
                             element.Value = not element.Value
                             element.Callback(element.Value)
-                            self:render() -- Re-render to update toggle state
+                            self:Render() -- Re-render to update toggle state
                         end
                     end
                 end
@@ -289,7 +341,7 @@ function MatchaUI:handleInput(mousePos, mouse1Pressed)
     -- Handle dragging
     if self.Dragging then
         self.Position = createVector2(mousePos.X - self.DragOffset.X, mousePos.Y - self.DragOffset.Y)
-        self:updatePositions()
+        self:UpdatePositions()
     end
     
     -- Update hover states
@@ -300,7 +352,7 @@ function MatchaUI:handleInput(mousePos, mouse1Pressed)
                 local wasHovered = element.Hovered
                 element.Hovered = isMouseOver(element.Position, element.Size, mousePos)
                 if wasHovered ~= element.Hovered then
-                    self:render() -- Re-render to update hover state
+                    self:Render() -- Re-render to update hover state
                 end
             end
         end
@@ -309,7 +361,7 @@ function MatchaUI:handleInput(mousePos, mouse1Pressed)
     return false
 end
 
-function MatchaUI:updatePositions()
+function MatchaUI:UpdatePositions()
     -- Update main window elements
     self.Background.Position = self.Position
     self.TitleBar.Position = self.Position
@@ -324,85 +376,42 @@ function MatchaUI:updatePositions()
         local buttonX = self.Position.X + 20 + ((i - 1) * 90)
         local buttonPos = createVector2(buttonX, self.Position.Y + 40)
         
-        tab.Button.Position = buttonPos
-        tab.Button.Text.Position = createVector2(buttonX + 35, buttonPos.Y + 8)
-        tab.Button.Underline.Position = createVector2(buttonX + 35, buttonPos.Y + 28)
+        if tab.Button then
+            tab.Button.Position = buttonPos
+            if tab.Button.Text then
+                tab.Button.Text.Position = createVector2(buttonX + 35, buttonPos.Y + 8)
+            end
+            if tab.Button.Underline then
+                tab.Button.Underline.Position = createVector2(buttonX + 35, buttonPos.Y + 28)
+            end
+        end
     end
     
-    self:render()
+    self:Render()
 end
 
-function MatchaUI:setVisible(visible)
+function MatchaUI:SetVisible(visible)
     self.Visible = visible
     for _, obj in ipairs(self.Objects) do
-        obj.Visible = visible
+        if obj then
+            obj.Visible = visible
+        end
     end
-    self:render()
+    self:Render()
 end
 
 function MatchaUI:Destroy()
     for _, obj in ipairs(self.Objects) do
-        obj:Remove()
+        if obj then
+            obj:Remove()
+        end
     end
     self.Objects = {}
 end
 
--- Tab Methods
-local Tab = {}
-Tab.__index = Tab
-
-function Tab:Section(name)
-    local section = {
-        Type = "Section",
-        Text = name,
-        Position = createVector2(0, 0),
-        Size = createVector2(0, 35)
-    }
-    
-    table.insert(self.Elements, section)
-    return section
-end
-
-function Tab:Button(text, callback)
-    local button = {
-        Type = "Button",
-        Text = text,
-        Callback = callback,
-        Position = createVector2(0, 0),
-        Size = createVector2(0, 35),
-        Hovered = false
-    }
-    
-    table.insert(self.Elements, button)
-    table.insert(self.Buttons, button)
-    return button
-end
-
-function Tab:Toggle(text, default, callback)
-    local toggle = {
-        Type = "Toggle",
-        Text = text,
-        Value = default or false,
-        Callback = callback,
-        Position = createVector2(0, 0),
-        Size = createVector2(0, 30),
-        Hovered = false
-    }
-    
-    table.insert(self.Elements, toggle)
-    table.insert(self.Toggles, toggle)
-    return toggle
-end
-
--- Set metatable for tabs
-setmetatable(MatchaUI, {
-    __call = function(_, ...)
-        return MatchaUI.Window(...)
-    end
-})
-
-for _, tab in ipairs(MatchaUI.Tabs) do
-    setmetatable(tab, Tab)
+-- Create a global function to create windows
+function MatchaUI.CreateWindow(title, size, position)
+    return MatchaUI:CreateWindow(title, size, position)
 end
 
 return MatchaUI
